@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1b120a">
+<title>Tempelløb 3D</title>
+<style>
+  :root {
+    --gold: #f5c542;
+    --gold-dark: #b8860b;
+    --bg: #1b120a;
+    --panel: rgba(30, 20, 10, 0.92);
+    --text: #fff6e0;
+    --muted: #d9c7a3;
+    --red: #e5484d;
+    --green: #3fb950;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background: var(--bg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--text); touch-action: none; user-select: none; -webkit-user-select: none;
+    overscroll-behavior: none;
+  }
+  canvas { display: block; }
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between;
+    align-items: flex-start; padding: calc(10px + env(safe-area-inset-top)) 16px 0; pointer-events: none;
+    font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,.7); font-size: 18px; gap: 8px;
+  }
+  #hud .col { display: flex; flex-direction: column; gap: 4px; }
+  #hud .right { align-items: flex-end; }
+  #score { font-size: 26px; }
+  .pill { background: rgba(0,0,0,.35); border-radius: 999px; padding: 4px 12px; display: inline-flex; gap: 6px; align-items: center; }
+  #pauseBtn {
+    pointer-events: auto; background: rgba(0,0,0,.4); border: 0; color: var(--text); font-size: 20px;
+    width: 42px; height: 42px; border-radius: 50%; cursor: pointer;
+  }
+  #boosts { font-size: 15px; }
+  .overlay {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(10, 6, 2, 0.55); padding: 16px; z-index: 10;
+  }
+  .overlay.show { display: flex; }
+  .panel {
+    background: var(--panel); border: 2px solid var(--gold-dark); border-radius: 18px;
+    padding: 22px 20px; width: 100%; max-width: 380px; text-align: center;
+    box-shadow: 0 10px 40px rgba(0,0,0,.6); max-height: 100%; overflow-y: auto;
+  }
+  h1 { margin: 0 0 4px; font-size: 34px; color: var(--gold); letter-spacing: 1px; text-shadow: 0 3px 0 #6b4a0a; }
+  h2 { margin: 0 0 12px; font-size: 26px; color: var(--gold); }
+  p { margin: 6px 0; color: var(--muted); line-height: 1.4; }
+  .btn {
+    display: block; width: 100%; margin: 10px 0 0; padding: 14px; font-size: 18px; font-weight: 800;
+    border: 0; border-radius: 12px; cursor: pointer; color: #2b1a00;
+    background: linear-gradient(#ffd866, #e0a500); box-shadow: 0 4px 0 #8a6200;
+  }
+  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #8a6200; }
+  .btn.secondary { background: linear-gradient(#e9dcc2, #bfa98a); box-shadow: 0 4px 0 #7a6a50; }
+  .btn.green { background: linear-gradient(#6ee787, #2ea043); box-shadow: 0 4px 0 #1a6b2b; color: #002a0b; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .stats { display: flex; justify-content: center; gap: 10px; margin: 12px 0 4px; flex-wrap: wrap; }
+  .shop-item {
+    display: flex; align-items: center; gap: 12px; text-align: left; background: rgba(255,255,255,.06);
+    border-radius: 12px; padding: 10px 12px; margin-top: 10px;
+  }
+  .shop-item .icon { font-size: 32px; width: 40px; text-align: center; }
+  .shop-item .info { flex: 1; min-width: 0; }
+  .shop-item .name { font-weight: 800; }
+  .shop-item .desc { font-size: 13px; color: var(--muted); }
+  .shop-item .owned { font-size: 13px; color: var(--gold); }
+  .shop-item button {
+    border: 0; border-radius: 10px; padding: 10px 12px; font-weight: 800; font-size: 15px; cursor: pointer;
+    background: linear-gradient(#ffd866, #e0a500); color: #2b1a00; white-space: nowrap;
+  }
+  .shop-item button:disabled { opacity: .45; cursor: not-allowed; }
+  .help { font-size: 14px; text-align: left; margin-top: 12px; background: rgba(255,255,255,.05); border-radius: 12px; padding: 10px 12px; }
+  .help div { margin: 3px 0; color: var(--muted); }
+  #toast {
+    position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%); font-size: 30px; font-weight: 900;
+    color: var(--gold); text-shadow: 0 3px 6px rgba(0,0,0,.8); pointer-events: none; opacity: 0;
+    transition: opacity .3s; text-align: center; white-space: nowrap;
+  }
+  #countdown { font-size: 15px; color: var(--muted); margin-top: 8px; }
+  .big-num { font-size: 40px; font-weight: 900; color: var(--text); }
+  #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .25s; }
+</style>
+</head>
+<body>
+<div id="hud" style="display:none">
+  <div class="col">
+    <div id="score">0</div>
+    <div class="pill">🪙 <span id="hudCoins">0</span></div>
+  </div>
+  <div class="col right">
+    <button id="pauseBtn" aria-label="Pause">⏸</button>
+    <div class="pill">❤️ <span id="hudLives">0</span></div>
+    <div id="boosts"></div>
+  </div>
+</div>
+<div id="toast"></div>
+<div id="flash"></div>
+
+<!-- Startmenu -->
+<div class="overlay show" id="menu">
+  <div class="panel">
+    <h1>TEMPELLØB</h1>
+    <p>Løb, hop og buk dig gennem det gamle tempel!</p>
+    <div class="stats">
+      <span class="pill">🏆 <span id="menuBest">0</span></span>
+      <span class="pill">🪙 <span id="menuCoins">0</span></span>
+      <span class="pill">❤️ <span id="menuLives">0</span></span>
+    </div>
+    <button class="btn" id="startBtn">▶ Løb!</button>
+    <button class="btn secondary" id="shopBtn">🛒 Butik</button>
+    <div class="help">
+      <div>👆 Swipe op – hop over stammer og huller</div>
+      <div>👇 Swipe ned – buk dig under bjælker</div>
+      <div>👈👉 Swipe til siden – skift bane</div>
+      <div>⌨️ Piletaster / WASD / mellemrum virker også</div>
+    </div>
+  </div>
+</div>
+
+<!-- Butik -->
+<div class="overlay" id="shop">
+  <div class="panel">
+    <h2>🛒 Butik</h2>
+    <div class="stats"><span class="pill">🪙 <span id="shopCoins">0</span></span></div>
+    <div id="shopItems"></div>
+    <button class="btn secondary" id="shopBack">Tilbage</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay" id="pause">
+  <div class="panel">
+    <h2>Pause</h2>
+    <button class="btn" id="resumeBtn">▶ Fortsæt</button>
+    <button class="btn secondary" id="quitBtn">Afslut løb</button>
+  </div>
+</div>
+
+<!-- Død / fortsæt -->
+<div class="overlay" id="dead">
+  <div class="panel">
+    <h2 id="deadTitle">Av!</h2>
+    <div class="big-num" id="deadScore">0</div>
+    <p>point · 🪙 <span id="deadCoins">0</span> mønter i dette løb</p>
+    <div id="continueBox">
+      <button class="btn green" id="useLifeBtn">❤️ Brug et liv og fortsæt</button>
+      <button class="btn" id="buyLifeBtn">Køb liv og fortsæt (🪙 <span class="lifePrice"></span>)</button>
+      <div id="countdown"></div>
+    </div>
+    <button class="btn secondary" id="giveUpBtn">Afslut</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay" id="over">
+  <div class="panel">
+    <h2>Løbet er slut</h2>
+    <div class="big-num" id="overScore">0</div>
+    <p id="overBest"></p>
+    <p>🪙 +<span id="overCoins">0</span> mønter · i alt <span id="overTotal">0</span></p>
+    <button class="btn" id="againBtn">↻ Løb igen</button>
+    <button class="btn secondary" id="overShopBtn">🛒 Butik</button>
+    <button class="btn secondary" id="menuBtn">Menu</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+// ---------- Konstanter ----------
+const LANE_W = 3;
+const SEG = 4;               // længde på et banestykke
+const VIEW_AHEAD = 170;      // hvor langt frem banen bygges
+const GRAVITY = 32;
+const JUMP_V = 11.5;
+const STAND_H = 1.7;
+const SLIDE_H = 0.75;
+const SLIDE_TIME = 0.75;
+const START_SPEED = 14;
+const MAX_SPEED = 34;
+
+const SHOP = [
+  { id: 'lives',  icon: '❤️', name: 'Ekstra liv',  desc: 'Fortsæt løbet når du dør.', price: 150 },
+  { id: 'shield', icon: '🛡️', name: 'Skjold',      desc: 'Starter løbet med et skjold, der tager ét stød.', price: 100 },
+  { id: 'magnet', icon: '🧲', name: 'Magnet',      desc: 'Trækker mønter til dig de første 20 sekunder.', price: 120 },
+  { id: 'double', icon: '✨', name: 'Dobbelt mønter', desc: 'Alle mønter tæller dobbelt i næste løb.', price: 200 },
+];
+const LIFE_PRICE = SHOP[0].price;
+
+// ---------- Gemt data ----------
+const SAVE_KEY = 'tempellob-save-v1';
+const save = { coins: 0, best: 0, lives: 1, shield: 0, magnet: 0, double: 0 };
+try {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (raw) Object.assign(save, JSON.parse(raw));
+} catch (e) {}
+function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
+
+// ---------- Lyd ----------
+let audioCtx = null;
+function beep(freq, dur, type = 'sine', vol = 0.08, slide = 0) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const t = audioCtx.currentTime;
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t + dur);
+  } catch (e) {}
+}
+const sfx = {
+  coin: () => beep(1320, 0.08, 'square', 0.04),
+  jump: () => beep(300, 0.18, 'triangle', 0.08, 300),
+  slide: () => beep(220, 0.2, 'sawtooth', 0.04, -120),
+  hit: () => beep(140, 0.45, 'sawtooth', 0.12, -100),
+  fall: () => beep(500, 0.9, 'triangle', 0.1, -440),
+  buy: () => { beep(660, 0.1, 'square', 0.05); setTimeout(() => beep(990, 0.15, 'square', 0.05), 90); },
+  shield: () => beep(900, 0.3, 'sine', 0.08, -500),
+};
+
+// ---------- Three.js opsætning ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const SKY = 0xe8b77a;
+scene.background = new THREE.Color(SKY);
+scene.fog = new THREE.Fog(SKY, 40, 150);
+
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 300);
+
+scene.add(new THREE.HemisphereLight(0xfff1d6, 0x5a3b1a, 0.85));
+const sun = new THREE.DirectionalLight(0xffe0b0, 0.8);
+sun.position.set(6, 12, 4);
+scene.add(sun);
+
+// Tekstur: stenfliser
+function stoneTexture(base, line) {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = base; g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 400; i++) {
+    g.fillStyle = `rgba(0,0,0,${Math.random() * 0.12})`;
+    g.fillRect(Math.random() * 128, Math.random() * 128, 3, 3);
+  }
+  g.strokeStyle = line; g.lineWidth = 4;
+  g.strokeRect(2, 2, 124, 124);
+  g.beginPath(); g.moveTo(64, 0); g.lineTo(64, 64); g.moveTo(0, 64); g.lineTo(128, 64);
+  g.moveTo(32, 64); g.lineTo(32, 128); g.moveTo(96, 64); g.lineTo(96, 128); g.stroke();
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+const floorTex = stoneTexture('#b08a5a', '#6e5232');
+floorTex.repeat.set(1, SEG / 3);
+const wallTex = stoneTexture('#8f7a5c', '#4d3f2c');
+wallTex.repeat.set(SEG / 3, 1);
+
+const MAT = {
+  floor: new THREE.MeshLambertMaterial({ map: floorTex }),
+  floorEdge: new THREE.MeshLambertMaterial({ color: 0x5c4326 }),
+  wall: new THREE.MeshLambertMaterial({ map: wallTex }),
+  log: new THREE.MeshLambertMaterial({ color: 0x7a4a22 }),
+  logEnd: new THREE.MeshLambertMaterial({ color: 0xc89a5a }),
+  stone: new THREE.MeshLambertMaterial({ color: 0x9c8a70 }),
+  stoneDark: new THREE.MeshLambertMaterial({ color: 0x6b5d48 }),
+  fire: new THREE.MeshBasicMaterial({ color: 0xff7a1a }),
+  coin: new THREE.MeshLambertMaterial({ color: 0xffcc33, emissive: 0x664400 }),
+  leaf: new THREE.MeshLambertMaterial({ color: 0x3f7a2e }),
+  leafDark: new THREE.MeshLambertMaterial({ color: 0x2c5a20 }),
+  trunk: new THREE.MeshLambertMaterial({ color: 0x5a3a1c }),
+  abyss: new THREE.MeshBasicMaterial({ color: 0x120a04 }),
+  shadow: new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }),
+  shield: new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.25, depthWrite: false }),
+};
+
+const GEO = {
+  lane: new THREE.BoxGeometry(LANE_W, 1, SEG),
+  edge: new THREE.BoxGeometry(0.6, 1.4, SEG),
+  wall: new THREE.BoxGeometry(1, 3, SEG),
+  coin: new THREE.CylinderGeometry(0.42, 0.42, 0.1, 18),
+  log: new THREE.CylinderGeometry(0.45, 0.45, LANE_W * 3, 14),
+  logShort: new THREE.CylinderGeometry(0.45, 0.45, LANE_W - 0.2, 14),
+  block: new THREE.BoxGeometry(LANE_W - 0.3, 2.6, 1.6),
+  beam: new THREE.BoxGeometry(LANE_W * 3 + 0.6, 0.7, 0.8),
+  beamShort: new THREE.BoxGeometry(LANE_W - 0.2, 0.7, 0.8),
+  post: new THREE.BoxGeometry(0.6, 3.2, 0.6),
+  pillar: new THREE.CylinderGeometry(0.6, 0.7, 6, 10),
+  pillarTop: new THREE.BoxGeometry(1.8, 0.5, 1.8),
+  trunk: new THREE.CylinderGeometry(0.25, 0.35, 3, 6),
+  leaves: new THREE.ConeGeometry(1.6, 3.6, 7),
+  flame: new THREE.ConeGeometry(0.25, 0.7, 6),
+};
+
+// Mørk afgrund under banen
+const abyss = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), MAT.abyss);
+abyss.rotation.x = -Math.PI / 2; abyss.position.y = -18;
+scene.add(abyss);
+
+// Jungle-bund ved siden af banen
+const jungleMat = new THREE.MeshLambertMaterial({ color: 0x4a6b2a });
+const jungleL = new THREE.Mesh(new THREE.PlaneGeometry(60, 400), jungleMat);
+jungleL.rotation.x = -Math.PI / 2; jungleL.position.set(-36, -1.2, 0);
+const jungleR = jungleL.clone(); jungleR.position.x = 36;
+scene.add(jungleL, jungleR);
+
+// ---------- Spiller ----------
+function makePlayer() {
+  const root = new THREE.Group();
+  const model = new THREE.Group();
+  root.add(model);
+  const skin = new THREE.MeshLambertMaterial({ color: 0xe0ac7e });
+  const shirt = new THREE.MeshLambertMaterial({ color: 0x2f7fbf });
+  const pants = new THREE.MeshLambertMaterial({ color: 0x8a6a3a });
+  const hat = new THREE.MeshLambertMaterial({ color: 0x6b4a22 });
+  const boot = new THREE.MeshLambertMaterial({ color: 0x3a2a18 });
+
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.75, 0.42), shirt);
+  torso.position.y = 1.1; model.add(torso);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.46), skin);
+  head.position.y = 1.74; model.add(head);
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 0.06, 16), hat);
+  brim.position.y = 1.98; model.add(brim);
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.24, 16), hat);
+  crown.position.y = 2.1; model.add(crown);
+  const pack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 0.22), hat);
+  pack.position.set(0, 1.15, 0.3); model.add(pack);
+
+  function limb(w, h, mat, x, y, footMat) {
+    const pivot = new THREE.Group(); pivot.position.set(x, y, 0);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), mat);
+    m.position.y = -h / 2; pivot.add(m);
+    if (footMat) {
+      const f = new THREE.Mesh(new THREE.BoxGeometry(w + 0.04, 0.14, w + 0.16), footMat);
+      f.position.set(0, -h + 0.05, -0.06); pivot.add(f);
+    }
+    model.add(pivot); return pivot;
+  }
+  const legL = limb(0.28, 0.72, pants, -0.18, 0.74, boot);
+  const legR = limb(0.28, 0.72, pants, 0.18, 0.74, boot);
+  const armL = limb(0.2, 0.68, skin, -0.5, 1.44);
+  const armR = limb(0.2, 0.68, skin, 0.5, 1.44);
+
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.55, 20), MAT.shadow);
+  shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.02;
+  scene.add(shadow);
+
+  const bubble = new THREE.Mesh(new THREE.SphereGeometry(1.25, 20, 14), MAT.shield);
+  bubble.position.y = 1; bubble.visible = false; root.add(bubble);
+
+  model.rotation.y = Math.PI; // vend mod løberetningen (-z)
+  scene.add(root);
+  return { root, model, legL, legR, armL, armR, shadow, bubble };
+}
+const P = makePlayer();
+
+// ---------- Spiltilstand ----------
+let state = 'menu'; // menu | playing | paused | dying | dead | over
+const S = {};
+let segments = [], obstacles = [], coins = [], decos = [];
+let farZ = 0, cooldown = 0, coinLane = 1, coinLaneLeft = 0;
+
+function resetRun(consumeBoosts) {
+  for (const s of segments) scene.remove(s.group);
+  for (const o of obstacles) scene.remove(o.mesh);
+  for (const c of coins) scene.remove(c.mesh);
+  for (const d of decos) scene.remove(d);
+  segments = []; obstacles = []; coins = []; decos = [];
+  farZ = 10; cooldown = 0; coinLaneLeft = 0;
+
+  Object.assign(S, {
+    lane: 1, x: 0, y: 0, z: 0, vy: 0,
+    speed: START_SPEED, dist: 0, runCoins: 0,
+    grounded: true, slideT: 0, falling: false,
+    invuln: 0, shield: false, magnetT: 0, double: false,
+    animT: 0, dieT: 0, deathCause: '', revives: 0,
+  });
+  if (consumeBoosts) {
+    if (save.shield > 0) { save.shield--; S.shield = true; }
+    if (save.magnet > 0) { save.magnet--; S.magnetT = 20; }
+    if (save.double > 0) { save.double--; S.double = true; }
+    persist();
+  }
+
+  // Første stykke er sikkert
+  while (farZ > -VIEW_AHEAD) spawnSegment(farZ > -50);
+  P.model.rotation.set(0, Math.PI, 0);
+  P.model.position.set(0, 0, 0);
+  P.model.visible = true;
+}
+
+// ---------- Banegenerering ----------
+const laneX = l => (l - 1) * LANE_W;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+
+function spawnSegment(safe) {
+  const z0 = farZ, zc = z0 - SEG / 2;
+  const group = new THREE.Group();
+  const seg = { z0, z1: z0 - SEG, holes: [false, false, false], lanes: [], group };
+  for (let i = 0; i < 3; i++) {
+    const m = new THREE.Mesh(GEO.lane, MAT.floor);
+    m.position.set(laneX(i), -0.5, zc);
+    group.add(m); seg.lanes.push(m);
+  }
+  for (const side of [-1, 1]) {
+    const e = new THREE.Mesh(GEO.edge, MAT.floorEdge);
+    e.position.set(side * (LANE_W * 1.5 + 0.3), -0.3, zc); group.add(e);
+  }
+  scene.add(group);
+  segments.push(seg);
+  farZ -= SEG;
+
+  // Dekoration
+  if (Math.random() < 0.35) spawnDeco(zc);
+
+  if (safe) return;
+
+  if (cooldown > 0) {
+    cooldown--;
+    maybeCoins(seg);
+    return;
+  }
+
+  // Afstand mellem forhindringer vokser med farten så reaktionstiden holdes
+  cooldown = Math.ceil((S.speed * 0.6) / SEG) + Math.floor(rnd(0, 2.5));
+  const fast = S.speed > 20;
+  const patterns = ['log', 'beam', 'walls', 'walls', 'hole', 'partialHole', 'mixed', 'fireLane', 'logLane'];
+  if (fast) patterns.push('longHole', 'mixed');
+  const p = pick(patterns);
+
+  switch (p) {
+    case 'log': {
+      addObstacle(makeLog(true), 0, 0.45, zc, LANE_W * 3, 0.9, 0.9);
+      coinArc([0, 1, 2][Math.floor(rnd(0, 3))], zc);
+      break;
+    }
+    case 'logLane': {
+      const lanes = [0, 1, 2];
+      for (const l of lanes) {
+        if (Math.random() < 0.5) addObstacle(makeLog(false), laneX(l), 0.45, zc, LANE_W - 0.2, 0.9, 0.9);
+        else addObstacle(makeBlock(), laneX(l), 1.3, zc, LANE_W - 0.3, 2.6, 1.6);
+      }
+      // sørg for at mindst én bane kan hoppes over
+      const last = obstacles[obstacles.length - 1];
+      if (last.h > 2) {
+        scene.remove(last.mesh); obstacles.pop();
+        addObstacle(makeLog(false), last.x, 0.45, zc, LANE_W - 0.2, 0.9, 0.9);
+      }
+      break;
+    }
+    case 'beam': {
+      addObstacle(makeBeam(), 0, 1.25 + 0.35, zc, LANE_W * 3, 0.7, 0.8, 1.25, 10);
+      coinLine(Math.floor(rnd(0, 3)), zc + 3, 3, 0.6);
+      break;
+    }
+    case 'walls': {
+      const free = Math.floor(rnd(0, 3));
+      const blockTwo = Math.random() < 0.6;
+      for (let l = 0; l < 3; l++) {
+        if (l === free) continue;
+        if (!blockTwo && Math.random() < 0.5) continue;
+        addObstacle(makeBlock(), laneX(l), 1.3, zc, LANE_W - 0.3, 2.6, 1.6);
+      }
+      coinLine(free, zc + 4, 4);
+      break;
+    }
+    case 'hole': {
+      seg.holes = [true, true, true];
+      applyHoles(seg);
+      coinArc(Math.floor(rnd(0, 3)), zc);
+      break;
+    }
+    case 'longHole': {
+      seg.holes = [true, true, true];
+      applyHoles(seg);
+      // næste segment er også hul
+      const s2 = spawnPlain();
+      s2.holes = [true, true, true]; applyHoles(s2);
+      break;
+    }
+    case 'partialHole': {
+      const solid = Math.floor(rnd(0, 3));
+      for (let l = 0; l < 3; l++) seg.holes[l] = l !== solid && Math.random() < 0.85;
+      seg.holes[solid] = false;
+      applyHoles(seg);
+      coinLine(solid, zc + 4, 4);
+      break;
+    }
+    case 'mixed': {
+      const order = [0, 1, 2].sort(() => Math.random() - 0.5);
+      addObstacle(makeBlock(), laneX(order[0]), 1.3, zc, LANE_W - 0.3, 2.6, 1.6);
+      addObstacle(makeLog(false), laneX(order[1]), 0.45, zc, LANE_W - 0.2, 0.9, 0.9);
+      addObstacle(makeBeam(true), laneX(order[2]), 1.6, zc, LANE_W - 0.2, 0.7, 0.8, 1.25, 10);
+      break;
+    }
+    case 'fireLane': {
+      // bålfelter i to baner – hop over eller skift bane
+      const free = Math.floor(rnd(0, 3));
+      for (let l = 0; l < 3; l++) {
+        if (l === free) continue;
+        addObstacle(makeFire(), laneX(l), 0.3, zc, LANE_W - 0.4, 0.6, 1.4);
+      }
+      coinLine(free, zc + 3, 3);
+      break;
+    }
+  }
+}
+
+function spawnPlain() {
+  const keep = cooldown; cooldown = 99;
+  spawnSegment(true);
+  cooldown = keep;
+  return segments[segments.length - 1];
+}
+
+function applyHoles(seg) {
+  seg.holes.forEach((h, i) => { seg.lanes[i].visible = !h; });
+}
+
+function maybeCoins(seg) {
+  if (coinLaneLeft <= 0) {
+    if (Math.random() < 0.45) { coinLane = Math.floor(rnd(0, 3)); coinLaneLeft = Math.floor(rnd(3, 7)); }
+    else return;
+  }
+  coinLaneLeft--;
+  if (seg.holes[coinLane]) return;
+  coinLine(coinLane, seg.z0 - 1, 2, 0, 2);
+}
+
+function addCoin(x, y, z) {
+  const m = new THREE.Mesh(GEO.coin, MAT.coin);
+  m.rotation.z = Math.PI / 2;
+  m.position.set(x, y, z);
+  scene.add(m);
+  coins.push({ mesh: m, taken: false });
+}
+function coinLine(lane, zStart, n, yOff = 0, spacing = 2) {
+  for (let i = 0; i < n; i++) addCoin(laneX(lane), 1 + yOff, zStart - i * spacing);
+}
+function coinArc(lane, zc) {
+  for (let i = -3; i <= 3; i++) {
+    const t = i / 3.5;
+    addCoin(laneX(lane), 1 + 2.2 * (1 - t * t), zc + i * 1.5);
+  }
+}
+
+function addObstacle(mesh, x, cy, z, w, h, d, minY, maxY) {
+  mesh.position.set(x, cy, z);
+  scene.add(mesh);
+  obstacles.push({
+    mesh, x, z, w, h, d,
+    minY: minY !== undefined ? minY : cy - h / 2,
+    maxY: maxY !== undefined ? maxY : cy + h / 2,
+  });
+}
+
+function makeLog(full) {
+  const g = new THREE.Group();
+  const log = new THREE.Mesh(full ? GEO.log : GEO.logShort, MAT.log);
+  log.rotation.z = Math.PI / 2; g.add(log);
+  return g;
+}
+function makeBlock() {
+  const g = new THREE.Group();
+  const b = new THREE.Mesh(GEO.block, MAT.stone); g.add(b);
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(LANE_W - 0.1, 0.3, 1.8), MAT.stoneDark);
+  cap.position.y = 1.3; g.add(cap);
+  // lille "ansigt" for tempelstemning
+  const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.25, 0.05), MAT.stoneDark);
+  eye1.position.set(-0.5, 0.5, 0.81); g.add(eye1);
+  const eye2 = eye1.clone(); eye2.position.x = 0.5; g.add(eye2);
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.2, 0.05), MAT.stoneDark);
+  mouth.position.set(0, -0.3, 0.81); g.add(mouth);
+  return g;
+}
+function makeBeam(short) {
+  const g = new THREE.Group();
+  const beam = new THREE.Mesh(short ? GEO.beamShort : GEO.beam, MAT.log); g.add(beam);
+  const half = short ? (LANE_W - 0.2) / 2 : LANE_W * 1.5 + 0.3;
+  if (!short) {
+    for (const s of [-1, 1]) {
+      const post = new THREE.Mesh(GEO.post, MAT.trunk);
+      post.position.set(s * half, 0, 0); // stolper fra jorden og op
+      g.add(post);
+    }
+  } else {
+    // korte bjælker hænger i reb
+    for (const s of [-1, 1]) {
+      const rope = new THREE.Mesh(new THREE.BoxGeometry(0.06, 4, 0.06), MAT.trunk);
+      rope.position.set(s * (half - 0.2), 2.3, 0); g.add(rope);
+    }
+  }
+  return g;
+}
+function makeFire() {
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.BoxGeometry(LANE_W - 0.4, 0.15, 1.4), MAT.stoneDark);
+  base.position.y = -0.22; g.add(base);
+  const flames = [];
+  for (let i = 0; i < 6; i++) {
+    const f = new THREE.Mesh(GEO.flame, i % 2 ? MAT.fire : new THREE.MeshBasicMaterial({ color: 0xffd23a }));
+    f.position.set(rnd(-1, 1), 0.1, rnd(-0.5, 0.5));
+    g.add(f); flames.push(f);
+  }
+  g.userData.flames = flames;
+  return g;
+}
+
+function spawnDeco(z) {
+  const side = Math.random() < 0.5 ? -1 : 1;
+  let d;
+  if (Math.random() < 0.55) {
+    d = new THREE.Group();
+    const p = new THREE.Mesh(GEO.pillar, MAT.stone); p.position.y = 2; d.add(p);
+    const top = new THREE.Mesh(GEO.pillarTop, MAT.stoneDark); top.position.y = 5.2; d.add(top);
+    d.position.set(side * rnd(6.5, 8), 0, z);
+    if (Math.random() < 0.3) d.rotation.z = side * rnd(0.05, 0.2);
+  } else {
+    d = new THREE.Group();
+    const t = new THREE.Mesh(GEO.trunk, MAT.trunk); t.position.y = 0.3; d.add(t);
+    const l = new THREE.Mesh(GEO.leaves, Math.random() < 0.5 ? MAT.leaf : MAT.leafDark);
+    l.position.y = 3.3; d.add(l);
+    d.position.set(side * rnd(8, 16), -1.2, z);
+    const s = rnd(0.8, 1.6); d.scale.set(s, s, s);
+  }
+  scene.add(d); decos.push(d);
+}
+
+// ---------- Input ----------
+function moveLane(dir) {
+  if (state !== 'playing' || S.falling) return;
+  const n = S.lane + dir;
+  if (n < 0 || n > 2) return;
+  S.lane = n;
+}
+function jump() {
+  if (state !== 'playing' || S.falling) return;
+  if (S.grounded) {
+    S.vy = JUMP_V; S.grounded = false; S.slideT = 0; sfx.jump();
+  }
+}
+function slide() {
+  if (state !== 'playing' || S.falling) return;
+  if (!S.grounded) S.vy = -22; // hurtigt ned
+  S.slideT = SLIDE_TIME; sfx.slide();
+}
+
+window.addEventListener('keydown', e => {
+  const k = e.key;
+  if (k === 'ArrowLeft' || k === 'a' || k === 'A') moveLane(-1);
+  else if (k === 'ArrowRight' || k === 'd' || k === 'D') moveLane(1);
+  else if (k === 'ArrowUp' || k === 'w' || k === 'W' || k === ' ') jump();
+  else if (k === 'ArrowDown' || k === 's' || k === 'S') slide();
+  else if (k === 'Escape' || k === 'p' || k === 'P') togglePause();
+  else return;
+  e.preventDefault();
+});
+
+let tStart = null;
+const SWIPE_MIN = 28;
+window.addEventListener('touchstart', e => {
+  if (e.target.closest && e.target.closest('button')) return;
+  const t = e.changedTouches[0];
+  tStart = { x: t.clientX, y: t.clientY, done: false };
+}, { passive: true });
+window.addEventListener('touchmove', e => {
+  if (!tStart || tStart.done) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - tStart.x, dy = t.clientY - tStart.y;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_MIN) return;
+  tStart.done = true;
+  if (Math.abs(dx) > Math.abs(dy)) moveLane(dx > 0 ? 1 : -1);
+  else if (dy < 0) jump(); else slide();
+}, { passive: true });
+window.addEventListener('touchend', () => { tStart = null; }, { passive: true });
+
+// Swipe med mus (til test på computer)
+let mStart = null;
+renderer.domElement.addEventListener('mousedown', e => { mStart = { x: e.clientX, y: e.clientY, done: false }; });
+window.addEventListener('mousemove', e => {
+  if (!mStart || mStart.done) return;
+  const dx = e.clientX - mStart.x, dy = e.clientY - mStart.y;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_MIN) return;
+  mStart.done = true;
+  if (Math.abs(dx) > Math.abs(dy)) moveLane(dx > 0 ? 1 : -1);
+  else if (dy < 0) jump(); else slide();
+});
+window.addEventListener('mouseup', () => { mStart = null; });
+
+// ---------- UI ----------
+const $ = id => document.getElementById(id);
+const overlays = ['menu', 'shop', 'pause', 'dead', 'over'];
+let shopReturn = 'menu';
+function show(id) { overlays.forEach(o => $(o).classList.toggle('show', o === id)); }
+
+function toast(text, ms = 1000) {
+  const t = $('toast'); t.textContent = text; t.style.opacity = 1;
+  clearTimeout(toast._h); toast._h = setTimeout(() => (t.style.opacity = 0), ms);
+}
+function flash() { const f = $('flash'); f.style.opacity = 0.6; setTimeout(() => (f.style.opacity = 0), 80); }
+
+function refreshMenu() {
+  $('menuBest').textContent = save.best;
+  $('menuCoins').textContent = save.coins;
+  $('menuLives').textContent = save.lives;
+}
+function renderShop() {
+  $('shopCoins').textContent = save.coins;
+  const box = $('shopItems'); box.innerHTML = '';
+  for (const it of SHOP) {
+    const row = document.createElement('div'); row.className = 'shop-item';
+    row.innerHTML = `<div class="icon">${it.icon}</div>
+      <div class="info"><div class="name">${it.name}</div><div class="desc">${it.desc}</div>
+      <div class="owned">Du har: ${save[it.id]}</div></div>
+      <button ${save.coins < it.price ? 'disabled' : ''}>🪙 ${it.price}</button>`;
+    row.querySelector('button').onclick = () => {
+      if (save.coins < it.price) return;
+      save.coins -= it.price; save[it.id]++; persist(); sfx.buy(); renderShop();
+    };
+    box.appendChild(row);
+  }
+}
+function updateHud() {
+  $('score').textContent = Math.floor(score());
+  $('hudCoins').textContent = S.runCoins;
+  $('hudLives').textContent = save.lives;
+  const b = [];
+  if (S.shield) b.push('🛡️');
+  if (S.magnetT > 0) b.push('🧲 ' + Math.ceil(S.magnetT));
+  if (S.double) b.push('✨x2');
+  $('boosts').textContent = b.join('  ');
+}
+const score = () => S.dist + S.runCoins * 10;
+
+document.querySelectorAll('.lifePrice').forEach(el => (el.textContent = LIFE_PRICE));
+
+$('startBtn').onclick = startRun;
+$('againBtn').onclick = startRun;
+$('shopBtn').onclick = () => { shopReturn = 'menu'; renderShop(); show('shop'); };
+$('overShopBtn').onclick = () => { shopReturn = 'over'; renderShop(); show('shop'); };
+$('shopBack').onclick = () => {
+  if (shopReturn === 'over') { $('overTotal').textContent = save.coins; show('over'); }
+  else { refreshMenu(); show('menu'); }
+};
+$('menuBtn').onclick = () => { refreshMenu(); show('menu'); state = 'menu'; $('hud').style.display = 'none'; };
+$('pauseBtn').onclick = togglePause;
+$('resumeBtn').onclick = togglePause;
+$('quitBtn').onclick = () => { show(null); endRun(); };
+$('useLifeBtn').onclick = () => { if (save.lives > 0) { save.lives--; persist(); revive(); } };
+$('buyLifeBtn').onclick = () => {
+  if (save.coins + S.runCoins >= LIFE_PRICE) {
+    // brug først mønter fra løbet, derefter opsparing
+    const fromRun = Math.min(S.runCoins, LIFE_PRICE);
+    S.runCoins -= fromRun; save.coins -= LIFE_PRICE - fromRun;
+    persist(); sfx.buy(); revive();
+  }
+};
+$('giveUpBtn').onclick = () => { clearInterval(deadTimer); endRun(); };
+
+function togglePause() {
+  if (state === 'playing') { state = 'paused'; show('pause'); }
+  else if (state === 'paused') { state = 'playing'; show(null); last = performance.now(); }
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'playing') togglePause(); });
+
+function startRun() {
+  resetRun(true);
+  state = 'playing';
+  show(null);
+  $('hud').style.display = 'flex';
+  updateHud();
+  if (S.shield) P.bubble.visible = true;
+  toast('Løb!', 700);
+}
+
+let deadTimer = null;
+function die(cause) {
+  if (state !== 'playing') return;
+  S.deathCause = cause;
+  state = 'dying'; S.dieT = 0;
+  if (cause === 'fall') sfx.fall(); else { sfx.hit(); flash(); }
+}
+function showDead() {
+  state = 'dead';
+  $('deadTitle').textContent = S.deathCause === 'fall' ? 'Du faldt i afgrunden!' : 'Av! Du ramte en forhindring!';
+  $('deadScore').textContent = Math.floor(score());
+  $('deadCoins').textContent = S.runCoins;
+  const canUse = save.lives > 0;
+  const canBuy = !canUse && save.coins + S.runCoins >= LIFE_PRICE;
+  $('useLifeBtn').style.display = canUse ? 'block' : 'none';
+  $('useLifeBtn').textContent = `❤️ Brug et liv og fortsæt (${save.lives} tilbage)`;
+  $('buyLifeBtn').style.display = canBuy ? 'block' : 'none';
+  $('continueBox').style.display = canUse || canBuy ? 'block' : 'none';
+  show('dead');
+  clearInterval(deadTimer);
+  if (canUse || canBuy) {
+    let n = 8;
+    $('countdown').textContent = `Vælg inden ${n} sek.`;
+    deadTimer = setInterval(() => {
+      n--;
+      $('countdown').textContent = `Vælg inden ${n} sek.`;
+      if (n <= 0) { clearInterval(deadTimer); endRun(); }
+    }, 1000);
+  }
+}
+
+function revive() {
+  clearInterval(deadTimer);
+  S.revives++;
+  // Ryd forhindringer og huller tæt på spilleren
+  const clearTo = S.z - 30;
+  obstacles = obstacles.filter(o => {
+    if (o.z <= S.z + 6 && o.z >= clearTo) { scene.remove(o.mesh); return false; }
+    return true;
+  });
+  for (const s of segments) {
+    if (s.z1 <= S.z + 6 && s.z0 >= clearTo) { s.holes = [false, false, false]; applyHoles(s); }
+  }
+  S.y = 0; S.vy = 0; S.grounded = true; S.falling = false; S.slideT = 0;
+  S.x = laneX(S.lane);
+  S.invuln = 2.5;
+  P.model.rotation.set(0, Math.PI, 0); P.model.position.set(0, 0, 0);
+  state = 'playing'; show(null); last = performance.now();
+  toast('Fortsæt!', 800);
+}
+
+function endRun() {
+  state = 'over';
+  const sc = Math.floor(score());
+  const isBest = sc > save.best;
+  if (isBest) save.best = sc;
+  save.coins += S.runCoins;
+  persist();
+  $('overScore').textContent = sc;
+  $('overBest').textContent = isBest ? '🏆 Ny rekord!' : `Rekord: ${save.best}`;
+  $('overCoins').textContent = S.runCoins;
+  $('overTotal').textContent = save.coins;
+  $('hud').style.display = 'none';
+  show('over');
+}
+
+// ---------- Kollision ----------
+function playerBox() {
+  const h = S.slideT > 0 ? SLIDE_H : STAND_H;
+  return { minX: S.x - 0.4, maxX: S.x + 0.4, minY: S.y, maxY: S.y + h, minZ: S.z - 0.35, maxZ: S.z + 0.35 };
+}
+function hits(b, o) {
+  return b.maxX > o.x - o.w / 2 && b.minX < o.x + o.w / 2 &&
+         b.maxY > o.minY && b.minY < o.maxY &&
+         b.maxZ > o.z - o.d / 2 && b.minZ < o.z + o.d / 2;
+}
+function overHole() {
+  const lane = Math.max(0, Math.min(2, Math.round(S.x / LANE_W) + 1));
+  for (const s of segments) {
+    // lidt tilgivelse i kanterne
+    if (S.z <= s.z0 - 0.35 && S.z >= s.z1 + 0.35) return s.holes[lane];
+  }
+  return false;
+}
+
+// ---------- Opdatering ----------
+function update(dt) {
+  S.animT += dt;
+
+  if (state === 'dying') {
+    S.dieT += dt;
+    if (S.deathCause === 'fall') {
+      S.vy -= GRAVITY * dt; S.y += S.vy * dt;
+      P.model.rotation.x += dt * 4;
+    } else {
+      P.model.rotation.x = Math.min(Math.PI / 2, P.model.rotation.x + dt * 6);
+      P.model.position.y = Math.max(-0.2, P.model.position.y - dt);
+    }
+    if (S.dieT > 1.1) showDead();
+    placePlayer(dt);
+    return;
+  }
+  if (state !== 'playing') return;
+
+  S.speed = Math.min(MAX_SPEED, START_SPEED + S.dist * 0.012);
+  const dz = S.speed * dt;
+  S.z -= dz; S.dist += dz * 0.5;
+
+  // sidebevægelse
+  const tx = laneX(S.lane);
+  S.x += (tx - S.x) * Math.min(1, dt * 14);
+
+  // lodret
+  if (!S.grounded || S.falling) {
+    S.vy -= GRAVITY * dt; S.y += S.vy * dt;
+    if (S.y <= 0 && !S.falling) {
+      if (overHole() && S.invuln <= 0) { S.falling = true; }
+      else { S.y = 0; S.vy = 0; S.grounded = true; }
+    }
+  } else if (overHole() && S.invuln <= 0) {
+    S.falling = true; S.grounded = false; S.vy = 0;
+  }
+  if (S.falling && S.y < -1.2) { die('fall'); return; }
+
+  if (S.slideT > 0) S.slideT -= dt;
+  if (S.invuln > 0) S.invuln -= dt;
+  if (S.magnetT > 0) S.magnetT -= dt;
+
+  // forhindringer
+  if (!S.falling) {
+    const b = playerBox();
+    for (let i = 0; i < obstacles.length; i++) {
+      const o = obstacles[i];
+      if (Math.abs(o.z - S.z) > 3) continue;
+      if (!hits(b, o)) continue;
+      if (S.invuln > 0) continue;
+      if (S.shield) {
+        S.shield = false; P.bubble.visible = false; S.invuln = 1;
+        scene.remove(o.mesh); obstacles.splice(i, 1); i--;
+        sfx.shield(); toast('Skjoldet reddede dig!', 900);
+        continue;
+      }
+      die('hit'); return;
+    }
+  }
+
+  // mønter
+  const cy = S.y + 0.9;
+  for (const c of coins) {
+    if (c.taken) continue;
+    const m = c.mesh;
+    m.rotation.y += dt * 4;
+    if (S.magnetT > 0) {
+      const dzc = m.position.z - S.z;
+      if (dzc < 2 && dzc > -14) {
+        m.position.x += (S.x - m.position.x) * Math.min(1, dt * 8);
+        m.position.y += (cy - m.position.y) * Math.min(1, dt * 8);
+        m.position.z += (S.z - m.position.z) * Math.min(1, dt * 6);
+      }
+    }
+    const dx = m.position.x - S.x, dy = m.position.y - cy, dzz = m.position.z - S.z;
+    if (dx * dx + dy * dy + dzz * dzz < 1.5) {
+      c.taken = true; scene.remove(m);
+      S.runCoins += S.double ? 2 : 1; sfx.coin();
+    }
+  }
+
+  // ild-animation
+  for (const o of obstacles) {
+    const fl = o.mesh.userData.flames;
+    if (fl && Math.abs(o.z - S.z) < 60) fl.forEach((f, i) => { f.scale.y = 0.8 + Math.sin(S.animT * 14 + i) * 0.35; });
+  }
+
+  // byg mere bane & ryd op bag os
+  while (farZ > S.z - VIEW_AHEAD) spawnSegment(false);
+  const behind = S.z + 12;
+  if (segments.length && segments[0].z1 > behind) {
+    segments = segments.filter(s => { if (s.z1 > behind) { scene.remove(s.group); return false; } return true; });
+    obstacles = obstacles.filter(o => { if (o.z > behind) { scene.remove(o.mesh); return false; } return true; });
+    coins = coins.filter(c => { if (c.taken) return false; if (c.mesh.position.z > behind) { scene.remove(c.mesh); return false; } return true; });
+    decos = decos.filter(d => { if (d.position.z > behind + 10) { scene.remove(d); return false; } return true; });
+  }
+
+  placePlayer(dt);
+  updateHud();
+}
+
+function placePlayer(dt) {
+  P.root.position.set(S.x, S.y, S.z);
+  const run = S.animT * (8 + S.speed * 0.35);
+  if (state === 'playing') {
+    if (S.slideT > 0 && S.grounded) {
+      P.model.rotation.x = -1.2 * Math.min(1, (SLIDE_TIME - S.slideT) * 10, S.slideT * 8);
+      P.model.position.y = 0.25 * Math.abs(P.model.rotation.x) / 1.2 - 0.0;
+      P.legL.rotation.x = P.legR.rotation.x = 1.3;
+      P.armL.rotation.x = P.armR.rotation.x = 2.6;
+    } else if (!S.grounded) {
+      P.model.rotation.x = 0; P.model.position.y = 0;
+      P.legL.rotation.x = 0.9; P.legR.rotation.x = -0.4;
+      P.armL.rotation.x = P.armR.rotation.x = -2.6;
+    } else {
+      P.model.rotation.x = 0; P.model.position.y = Math.abs(Math.sin(run)) * 0.12;
+      const sw = Math.sin(run) * 0.9;
+      P.legL.rotation.x = sw; P.legR.rotation.x = -sw;
+      P.armL.rotation.x = -sw * 0.9; P.armR.rotation.x = sw * 0.9;
+    }
+    // hæld lidt ind i sideskift
+    P.model.rotation.z = (laneX(S.lane) - S.x) * -0.08;
+    P.model.visible = S.invuln > 0 ? Math.floor(S.animT * 12) % 2 === 0 : true;
+  }
+  P.bubble.visible = S.shield;
+  P.shadow.position.set(S.x, 0.02, S.z);
+  P.shadow.visible = !S.falling && !overHole();
+  const sh = Math.max(0.3, 1 - S.y * 0.2);
+  P.shadow.scale.set(sh, sh, sh);
+
+  // kamera
+  const camTargetX = S.x * 0.6;
+  camera.position.x += (camTargetX - camera.position.x) * Math.min(1, dt * 6);
+  camera.position.y = 5.2 + Math.max(0, S.y) * 0.3;
+  camera.position.z = S.z + 8.5;
+  camera.lookAt(camera.position.x * 0.8, 1.2 + Math.max(0, S.y) * 0.2, S.z - 8);
+
+  abyss.position.z = S.z - 60;
+  jungleL.position.z = jungleR.position.z = S.z - 60;
+  sun.position.set(6, 12, S.z + 4); sun.target.position.set(0, 0, S.z - 10); sun.target.updateMatrixWorld();
+}
+
+// ---------- Menu-baggrund ----------
+function idleScene(dt) {
+  S.animT = (S.animT || 0) + dt;
+  const sp = 6;
+  S.z -= sp * dt; S.speed = sp;
+  while (farZ > S.z - VIEW_AHEAD) spawnSegment(true);
+  const behind = S.z + 12;
+  segments = segments.filter(s => { if (s.z1 > behind) { scene.remove(s.group); return false; } return true; });
+  decos = decos.filter(d => { if (d.position.z > behind + 10) { scene.remove(d); return false; } return true; });
+  obstacles = obstacles.filter(o => { if (o.z > behind) { scene.remove(o.mesh); return false; } return true; });
+  coins = coins.filter(c => { if (c.taken || c.mesh.position.z > behind) { scene.remove(c.mesh); return false; } return true; });
+  const run = S.animT * 9;
+  const sw = Math.sin(run) * 0.9;
+  P.legL.rotation.x = sw; P.legR.rotation.x = -sw;
+  P.armL.rotation.x = -sw * 0.9; P.armR.rotation.x = sw * 0.9;
+  P.model.position.y = Math.abs(Math.sin(run)) * 0.12;
+  P.model.rotation.x = 0; P.model.rotation.z = 0; P.model.visible = true;
+  P.shadow.visible = true;
+  placePlayer(dt);
+}
+
+// ---------- Loop ----------
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (state === 'menu') idleScene(dt);
+  else update(dt);
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  // smallere skærm -> lidt bredere synsfelt så alle tre baner ses
+  camera.fov = camera.aspect < 0.8 ? 78 : 65;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+window.dispatchEvent(new Event('resize'));
+
+// Første opstart
+resetRun(false);
+refreshMenu();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
